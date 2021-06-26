@@ -20,6 +20,7 @@ import com.intellij.execution.ExecutionException;
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.util.text.StringUtil;
+import org.jetbrains.annotations.NotNull;
 import org.moe.common.configuration.RemoteSettings;
 import org.moe.common.exec.GradleExec;
 import org.moe.idea.MOEGlobalSettings;
@@ -58,7 +59,7 @@ public class MOEGradleRunner {
         return new GeneralCommandLine(cmdargs).withWorkDirectory(workingDir);
     }
 
-    public GeneralCommandLine construct(boolean isDebug, boolean isLaunch) throws ExecutionException {
+    public GeneralCommandLine construct(boolean isLaunch) throws ExecutionException {
         final List<String> args = new ArrayList<String>();
 
         // Get Gradle
@@ -74,6 +75,15 @@ public class MOEGradleRunner {
             args.add("moeLaunch");
         }
 
+        args.addAll(getCommandLineOptions(runConfig, isLaunch));
+
+        return new GeneralCommandLine(args).withWorkDirectory(workingDir);
+    }
+
+    @NotNull
+    public static List<String> getCommandLineOptions(@NotNull MOERunConfiguration runConfig, boolean isLaunch) {
+        final List<String> args = new ArrayList<String>();
+
         MOEGlobalSettings globalSettings = MOEGlobalSettings.getInstance();
         String logLevel = globalSettings.getGradleLoggingLevel();
         if (logLevel != null && !logLevel.isEmpty()) {
@@ -84,7 +94,39 @@ public class MOEGradleRunner {
             args.add(stacktraceLevel);
         }
 
+        // Pass launcher option
+        final String optionsString = getLauncherOptions(runConfig, isLaunch);
+        if (optionsString.length() > 0) {
+            args.add(optionsString);
+        }
+
+        // Pass remote build settings
+        if (runConfig.isRemoteBuildEnabled()) {
+            args.add("-Pmoe.remotebuild.properties.ignore");
+            Properties properties = RemoteSettings.getProperties(runConfig.getRemoteHost(), Integer.toString(runConfig.getRemotePort()),
+                    runConfig.getRemoteUser(), runConfig.getRemoteKnownhosts(), runConfig.getRemoteIdentity(),
+                    runConfig.getRemoteKeychainName(), runConfig.getRemoteKeychainPass(),
+                    Integer.toString(runConfig.getRemoteKeychainLocktimeout()), runConfig.getRemoteGradleRepositories());
+            RemoteSettings.getArguments("-P", properties, args);
+        }
+
+        // Pass target device
+        if (runConfig.runOnSimulator()) {
+            args.add("-Pmoe.launcher.simulators=" + runConfig.simulatorUdid());
+        } else {
+            if (!StringUtil.isEmptyOrSpaces(runConfig.deviceUdid())) {
+                args.add("-Pmoe.launcher.devices=" + runConfig.deviceUdid());
+            }
+        }
+
+        return args;
+    }
+
+    @NotNull
+    private static String getLauncherOptions(@NotNull MOERunConfiguration runConfig, boolean isLaunch) {
         final OptionsBuilder options = new OptionsBuilder();
+
+        final boolean isDebug = runConfig.getActionType().equals("Debug");
 
         // Push mode
         if (isLaunch) {
@@ -145,32 +187,7 @@ public class MOEGradleRunner {
             }
         }
 
-        // Pass option
-        final String optionsString = options.toString();
-        if (optionsString.length() > 0) {
-            args.add(optionsString);
-        }
-
-        // Pass remote build settings
-        if (runConfig.isRemoteBuildEnabled()) {
-            args.add("-Pmoe.remotebuild.properties.ignore");
-            Properties properties = RemoteSettings.getProperties(runConfig.getRemoteHost(), Integer.toString(runConfig.getRemotePort()),
-                    runConfig.getRemoteUser(), runConfig.getRemoteKnownhosts(), runConfig.getRemoteIdentity(),
-                    runConfig.getRemoteKeychainName(), runConfig.getRemoteKeychainPass(),
-                    Integer.toString(runConfig.getRemoteKeychainLocktimeout()), runConfig.getRemoteGradleRepositories());
-            RemoteSettings.getArguments("-P", properties, args);
-        }
-
-        // Pass target device
-        if (runConfig.runOnSimulator()) {
-            args.add("-Pmoe.launcher.simulators=" + runConfig.simulatorUdid());
-        } else {
-            if (!StringUtil.isEmptyOrSpaces(runConfig.deviceUdid())) {
-                args.add("-Pmoe.launcher.devices=" + runConfig.deviceUdid());
-            }
-        }
-
-        return new GeneralCommandLine(args).withWorkDirectory(workingDir);
+        return options.toString();
     }
 
     private static class OptionsBuilder {

@@ -90,8 +90,7 @@ public class MOERunProfileState extends CommandLineState {
         }
 
         final MOEGradleRunner gradleRunner = new MOEGradleRunner(runConfiguration);
-        final boolean isDebug = runConfiguration.getActionType().equals("Debug");
-        final GeneralCommandLine commandLine = gradleRunner.construct(isDebug, true);
+        final GeneralCommandLine commandLine = gradleRunner.construct(true);
         final OSProcessHandler handler = new MOEOSProcessHandler(commandLine);
         handler.setShouldDestroyProcessRecursively(true);
         final MOETestResultParser parser = new MOETestResultParser(new MOETestListener(this));
